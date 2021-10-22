@@ -1,0 +1,4 @@
+*.dat
+*.x
+data/
+.ipynb_checkpoints/
