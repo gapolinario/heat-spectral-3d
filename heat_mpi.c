@@ -71,18 +71,19 @@ static inline void write_complex_3D_array(fftw_complex *y, LI pid, LI N,
 static inline void write_real_1D_array(double *y, LI pid, LI N, LI numsteps,
 	double L,	char axis);
 static inline void jentzen_kloeden_winkel_step(
-	fftw_complex *ukx, fftw_complex *uky, fftw_complex *ukz,
-	fftw_complex *gx, fftw_complex *gy, fftw_complex *gz,
-	fftw_complex *tx, fftw_complex *ty, fftw_complex *tz,
+	fftw_complex *ukx,
+	fftw_complex *gx,
+	fftw_complex *tx,
 	double *K, double *K2, LI id, double dt, double sqdx, double visc);
 static inline void gen_force3D(double *fx, double *fy, double *fz,
 	fftw_complex *gx, fftw_complex *gy, fftw_complex *gz, double *ker,
 	LI N, LI HN, LI DN,
 	double TPI3, double PIL2, double sqdx,
 	VSLStreamStatePtr stream, double *rands);
-static inline void predictor_corrector_step(fftw_complex *ukx, fftw_complex *uky,
-	fftw_complex *ukz,	fftw_complex *gx, fftw_complex *gy, fftw_complex *gz,
-	fftw_complex *tx, fftw_complex *ty, fftw_complex *tz,
+static inline void euler_maruyama_step(fftw_complex *ukx, fftw_complex *gx,
+	double *K2, LI N, LI HN, double dt, double sqdt, double visc);
+static inline void predictor_corrector_step(fftw_complex *ukx, fftw_complex *gx,
+	fftw_complex *tx,
 	double *K2, LI N, LI HN, double dt, double sqdt, double visc);
 
 int main(int argc, char **argv){
@@ -97,7 +98,7 @@ int main(int argc, char **argv){
 	// u is the velocity vector, in real space
 	// t is a temp array, in Fourier space, used in predictor-corrector algorithm
 	double *K, *K2, *ker, *rands;
-	double *var_f, *var_f0, *var_x, *var_d1, *var_d2, *var_d3, *tmp; // observables
+	double *var_f, *var_x, *var_d1, *var_d2, *var_d3, *tmp; // observables
 	fftw_complex *gx, *gy, *gz, *ukx, *uky, *ukz, *tx, *ty, *tz; /* arrays */
 	//int dim;
 	double dx,sqdx,Ltot,L,dt,sqdt,visc,normN3,dtcte;
@@ -199,8 +200,6 @@ int main(int argc, char **argv){
 
 	if( (var_f = (double*) malloc(sizeof(double) * numsteps)) == NULL)
 		error("vector var_f");
-	if( (var_f0 = (double*) malloc(sizeof(double) * numsteps)) == NULL)
-		error("vector var_f0");
 	if( (var_x = (double*) malloc(sizeof(double) * numsteps)) == NULL)
 		error("vector var_x");
 	if( (var_d1 = (double*) malloc(sizeof(double) * numsteps)) == NULL)
@@ -294,8 +293,9 @@ int main(int argc, char **argv){
 
 	  gen_force3D(fx,fy,fz,gx,gy,gz,ker,N,HN,DN,TPI3,PIL2,sqdx,stream,rands);
 
-	  predictor_corrector_step(ukx,uky,ukz,gx,gy,gz,tx,ty,tz,K2,N,HN,dt,sqdt,visc);
-	  //jentzen_kloeden_winkel_step(ukx,uky,ukz,gx,gy,gz,tx,ty,tz,K,K2,id,dt,sqdx,visc);
+		//euler_maruyama_step(ukx,gx,K2,N,HN,dt,sqdt,visc);
+		//predictor_corrector_step(ukx,gx,tx,K2,N,HN,dt,sqdt,visc);
+	  jentzen_kloeden_winkel_step(ukx,gx,tx,K,K2,id,dt,sqdx,visc);
 
 	  // Sums of variances of Fourier modes
 		for(i=0;i<alloc_local;i++){
@@ -306,13 +306,7 @@ int main(int argc, char **argv){
 	    var_f[it] -= SQR(cabs(ukx[0]));
 	  }
 
-		// Sums of variances of Fourier modes
-		// Does not remove zero mode
-		for(i=0;i<alloc_local;i++){
-	    var_f0[it] += SQR(cabs(ukx[i]));
-	  }
-
-	  // variance of velocity gradient in x direction
+		// variance of velocity gradient in x direction
 	  // we can reuse g/f and its transform for that
 
 	  // Begins Var(dx uxx)
@@ -451,12 +445,6 @@ int main(int argc, char **argv){
 	  write_real_1D_array(tmp,pid,N,numsteps,L,'f');
 	}
 
-	// sum all variances (v, Fourier space), including zero mode
-	MPI_Reduce(var_f0,tmp,numsteps,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
-	if(id==0){
-	  write_real_1D_array(tmp,pid,N,numsteps,L,'0');
-	}
-
 	// sum all variances (u, real space) into arrays on root process
 	MPI_Reduce(var_x,tmp,numsteps,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 	if(id==0){
@@ -516,7 +504,6 @@ int main(int argc, char **argv){
 	FREEP(rands);
 
 	FREEP(var_f);
-	FREEP(var_f0);
 	FREEP(var_x);
 	FREEP(var_d1);
 	FREEP(var_d2);
@@ -695,9 +682,27 @@ static inline void gen_force3D(double *fx, double *fy, double *fz,
 
 }
 
-static inline void predictor_corrector_step(fftw_complex *ukx, fftw_complex *uky,
-	fftw_complex *ukz,	fftw_complex *gx, fftw_complex *gy, fftw_complex *gz,
-	fftw_complex *tx, fftw_complex *ty, fftw_complex *tz,
+static inline void euler_maruyama_step(fftw_complex *ukx, fftw_complex *gx,
+	double *K2, LI N, LI HN, double dt, double sqdt, double visc){
+
+	ptrdiff_t i;
+	double viscdt = visc*dt;
+	double f0sqdt = sqrt(f0*dt);
+
+	// deterministic evolution
+	for(i=0;i<alloc_local;i++){
+		ukx[i] -= viscdt * K2[i] * ukx[i];
+	}
+
+	// add stochastic force
+	for(i=0;i<alloc_local;i++){
+		ukx[i] += f0sqdt * gx[i];
+	}
+
+}
+
+static inline void predictor_corrector_step(fftw_complex *ukx, fftw_complex *gx,
+	fftw_complex *tx,
 	double *K2, LI N, LI HN, double dt, double sqdt, double visc){
 // order 1.0 predictor corrector algorithm
 // see Kloeden-Platen p. 502
@@ -713,33 +718,15 @@ static inline void predictor_corrector_step(fftw_complex *ukx, fftw_complex *uky
 	for(i=0;i<alloc_local;i++){
 		tx[i] = ukx[i];
 	}
-	for(i=0;i<alloc_local;i++){
-		ty[i] = uky[i];
-	}
-	for(i=0;i<alloc_local;i++){
-		tz[i] = ukz[i];
-	}
 
 	// deterministic evolution
 	for(i=0;i<alloc_local;i++){
 		tx[i] -= viscdt * K2[i] * ukx[i];
 	}
-	for(i=0;i<alloc_local;i++){
-		ty[i] -= viscdt * K2[i] * uky[i];
-	}
-	for(i=0;i<alloc_local;i++){
-		tz[i] -= viscdt * K2[i] * ukz[i];
-	}
 
 	// add stochastic force
 	for(i=0;i<alloc_local;i++){
 		tx[i] += f0sqdt * gx[i];
-	}
-	for(i=0;i<alloc_local;i++){
-		ty[i] += f0sqdt * gy[i];
-	}
-	for(i=0;i<alloc_local;i++){
-		tz[i] += f0sqdt * gz[i];
 	}
 
 	// corrector step
@@ -749,36 +736,14 @@ static inline void predictor_corrector_step(fftw_complex *ukx, fftw_complex *uky
 		ukx[i] -= .5 * viscdt * K2[i] * ukx[i];
 	}
 
-	for(i=0;i<alloc_local;i++){
-		uky[i] -= .5 * viscdt * K2[i] * uky[i];
-	}
-
-	for(i=0;i<alloc_local;i++){
-		ukz[i] -= .5 * viscdt * K2[i] * ukz[i];
-	}
-
 	// deterministic evolution, half step using predictor array
 	for(i=0;i<alloc_local;i++){
 		ukx[i] -= .5 * viscdt * K2[i] * tx[i];
 	}
 
-	for(i=0;i<alloc_local;i++){
-		uky[i] -= .5 * viscdt * K2[i] * ty[i];
-	}
-
-	for(i=0;i<alloc_local;i++){
-		ukz[i] -= .5 * viscdt * K2[i] * tz[i];
-	}
-
 	// add stochastic force
 	for(i=0;i<alloc_local;i++){
 		ukx[i] += f0sqdt * gx[i];
-	}
-	for(i=0;i<alloc_local;i++){
-		uky[i] += f0sqdt * gy[i];
-	}
-	for(i=0;i<alloc_local;i++){
-		ukz[i] += f0sqdt * gz[i];
 	}
 
 }
@@ -787,9 +752,9 @@ static inline void predictor_corrector_step(fftw_complex *ukx, fftw_complex *uky
 // Jentzen, Kloeden and Winkel, Annals of Applied Probability 21.3 (2011): 908-950
 // see eq. 21
 static inline void jentzen_kloeden_winkel_step(
-	fftw_complex *ukx, fftw_complex *uky, fftw_complex *ukz,
-	fftw_complex *gx, fftw_complex *gy, fftw_complex *gz,
-	fftw_complex *tx, fftw_complex *ty, fftw_complex *tz,
+	fftw_complex *ukx,
+	fftw_complex *gx,
+	fftw_complex *tx,
 	double *K, double *K2, LI id, double dt, double sqdx, double visc){
 
 	LI i, i0;
@@ -825,70 +790,6 @@ static inline void jentzen_kloeden_winkel_step(
 	for(i=i0;i<alloc_local;i++){
 		// stochastic part
 		ukx[i] += tx[i];
-	}
-
-	// step for y component of vectors
-
-	// zero mode is only present in rank 0
-	if(id==0){
-		// zero mode
-		cte    = sqrt(dt*f0);
-		// stochastic part
-		uky[0] += cte * gy[0];
-		i0 = 1;
-	} else {
-		i0 = 0;
-	}
-
-	cte = dt*visc;
-	// deterministic part
-	for(i=i0;i<alloc_local;i++){
-		uky[i] *= exp(-cte*K2[i]);
-	}
-	// stochastic part
-	cte = sqrt(.5*f0/visc);
-	for(i=i0;i<alloc_local;i++){
-		ty[i]  = cte * gy[i];
-	}
-	cte = 2.*visc*dt;
-	for(i=i0;i<alloc_local;i++){
-		ty[i] *= sqrt((1.-exp(-cte*K2[i]))/K2[i]);
-	}
-	for(i=i0;i<alloc_local;i++){
-		// stochastic part
-		uky[i] += ty[i];
-	}
-
-	// step for z component of vectors
-
-	// zero mode is only present in rank 0
-	if(id==0){
-		// zero mode
-		cte    = sqrt(dt*f0);
-		// stochastic part
-		ukz[0] += cte * gz[0];
-		i0 = 1;
-	} else {
-		i0 = 0;
-	}
-
-	cte = dt*visc;
-	// deterministic part
-	for(i=i0;i<alloc_local;i++){
-		ukz[i] *= exp(-cte*K2[i]);
-	}
-	// stochastic part
-	cte = sqrt(.5*f0/visc);
-	for(i=i0;i<alloc_local;i++){
-		tz[i]  = cte * gz[i];
-	}
-	cte = 2.*visc*dt;
-	for(i=i0;i<alloc_local;i++){
-		tz[i] *= sqrt((1.-exp(-cte*K2[i]))/K2[i]);
-	}
-	for(i=i0;i<alloc_local;i++){
-		// stochastic part
-		ukz[i] += tz[i];
 	}
 
 }

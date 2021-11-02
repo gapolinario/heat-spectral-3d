@@ -142,12 +142,12 @@ plt.axhline(np.mean(var[numsteps//2:]),color='red')
 plt.plot(var)
 plt.show()
 
-var = np.fromfile("data/HeatVar_0_R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}.dat".format(R,BN,BNT,L,nu,f0),dtype=np.double)
-
+"""
 # check total variance (discrete sum)
 plt.plot(var)
 plt.plot(var_theo+cuk_zero(range(numsteps)),color='grey',linestyle='dashed')
 plt.show()
+"""
 
 
 
