@@ -294,8 +294,8 @@ int main(int argc, char **argv){
 	  gen_force3D(fx,fy,fz,gx,gy,gz,ker,N,HN,DN,TPI3,PIL2,sqdx,stream,rands);
 
 		//euler_maruyama_step(ukx,gx,K2,N,HN,dt,sqdt,visc);
-		//predictor_corrector_step(ukx,gx,tx,K2,N,HN,dt,sqdt,visc);
-	  jentzen_kloeden_winkel_step(ukx,gx,tx,K,K2,id,dt,sqdx,visc);
+		predictor_corrector_step(ukx,gx,tx,K2,N,HN,dt,sqdt,visc);
+	  //jentzen_kloeden_winkel_step(ukx,gx,tx,K,K2,id,dt,sqdx,visc);
 
 	  // Sums of variances of Fourier modes
 		for(i=0;i<alloc_local;i++){
@@ -610,31 +610,8 @@ static inline void gen_force3D(double *fx, double *fy, double *fz,
 			}
 		}
 	}
-	// call RNG
-	vdRngGaussian( METHOD, stream, 2*alloc_local, rands, m1, m2 );
-	for(i=0;i<local_n0;i++){
-		for(j=0;j<N;j++){
-			for(k=0;k<N;k++){
-				fy[CRDR(i,j,k)] = rands[CRDR(i,j,k)] * sqdx;
-			}
-		}
-	}
-	// call RNG
-	vdRngGaussian( METHOD, stream, 2*alloc_local, rands, m1, m2 );
-	for(i=0;i<local_n0;i++){
-		for(j=0;j<N;j++){
-			for(k=0;k<N;k++){
-				fz[CRDR(i,j,k)] = rands[CRDR(i,j,k)] * sqdx;
-			}
-		}
-	}
-
-	// Wait for all processes to sync
-	MPI_Barrier(MPI_COMM_WORLD);
 
 	fftw_execute(plan_fx_f);
-	fftw_execute(plan_fy_f);
-	fftw_execute(plan_fz_f);
 
 	// Tried to save memory, ended up with a large stride
 	// Let's make it work, later I have to see what is best
@@ -651,34 +628,6 @@ static inline void gen_force3D(double *fx, double *fy, double *fz,
 			}
 		}
 	}
-
-	for(i=0;i<local_n0;i++){
-		cte1 = TPI3 * ker[local_0_start+i];
-		for(j=0;j<N;j++){
-			cte2 = ker[j];
-			for(k=0;k<HN;k++){
-				cte3 = ker[k];
-				norm = cte1 * cte2 * cte3;
-				gy[CRDI(i,j,k)] = gy[CRDI(i,j,k)] * norm;
-			}
-		}
-	}
-
-	for(i=0;i<local_n0;i++){
-		cte1 = TPI3 * ker[local_0_start+i];
-		for(j=0;j<N;j++){
-			cte2 = ker[j];
-			for(k=0;k<HN;k++){
-				cte3 = ker[k];
-				norm = cte1 * cte2 * cte3;
-				gz[CRDI(i,j,k)] = gz[CRDI(i,j,k)] * norm;
-			}
-		}
-	}
-
-	/*fftw_execute(plan_fx_b);
-	fftw_execute(plan_fy_b);
-	fftw_execute(plan_fz_b);*/
 
 }
 

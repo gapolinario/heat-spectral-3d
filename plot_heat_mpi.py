@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 R = 0
 BN = 5
-BNT = 5
+BNT = 6
 Lcte = .1
 nu = .2
 f0 = 1.
