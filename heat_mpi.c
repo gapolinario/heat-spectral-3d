@@ -7,10 +7,11 @@ make movecomp2
 (psmn)
 
 module load GCC/7.2.0 GCC/7.2.0/OpenMPI/3.0.0 Intel+MKL/2017.4
-make new_cube_mpi
+make heat_mpi
 
 // one process
-qsub sub_mkl_mpi.sh 0
+
+qsub ./sub_mkl_mpi.sh 1 6 5 0.01 1.0
 
 // ensemble of processes, same parameters
 seq 0 5 | xargs -I{} -P 6 qsub sub_mkl_mpi.sh {}
@@ -61,7 +62,7 @@ ptrdiff_t alloc_local, local_n0, local_0_start;
 int id,np;
 // Code parameters
 LI N,pid,numsteps,SEED;
-double nu,f0,c2;
+double nu,f0;
 
 /****** functions ******/
 double gauss_kernel(double k, double PIL2);
@@ -96,7 +97,7 @@ int main(int argc, char **argv){
 	// u is the velocity vector, in real space
 	// t is a temp array, in Fourier space, used in predictor-corrector algorithm
 	double *K, *K2, *ker, *rands;
-	double *var_f, *var_x, *var_d1, *var_d2, *var_d3, *tmp; // observables
+	double *var_f, *var_f0, *var_x, *var_d1, *var_d2, *var_d3, *tmp; // observables
 	fftw_complex *gx, *gy, *gz, *ukx, *uky, *ukz, *tx, *ty, *tz; /* arrays */
 	//int dim;
 	double dx,sqdx,Ltot,L,dt,sqdt,visc,normN3,dtcte;
@@ -104,7 +105,7 @@ int main(int argc, char **argv){
 	extern ptrdiff_t alloc_local, local_n0, local_0_start;
 	extern LI N,pid,SEED,numsteps;
 	extern int id,np;
-	extern double nu,f0,c2;
+	extern double nu,f0;
 
 	// Grid size
 	N = (LI) 1<<atoi(argv[2]); // 1<<N = 2^N
@@ -116,9 +117,8 @@ int main(int argc, char **argv){
 	L = .1*Ltot;
 	dx = Ltot/(double)N;
 	sqdx = dx * sqrt(dx); // StDev(dW_x) = dx^{dim/2}
-	nu = aotf(argv[4]);
+	nu = atof(argv[4]);
 	f0 = atof(argv[5]); // forcing amplitude
-	c2 = atof(argv[6]);
 
 	// Simulation time
 	// Time resolution must be roughly
@@ -151,7 +151,7 @@ int main(int argc, char **argv){
 		printf("\n\n");
 
 		printf("Simulation parameters \n\n N=2^%02d \n numsteps=10^%02d \n L=%.03f \n nu=%.03e \
-		\n f0=%.03e \n c2=%.03e \n dt=%.03e*dx^2\n\n",(int)(log2(N)),(int)(log10(numsteps)),L,nu,f0,c2,dtcte);
+		\n f0=%.03e \n dt=%.03e*dx^2\n\n",(int)(log2(N)),(int)(log10(numsteps)),L,nu,f0,dtcte);
 
 	}
 
@@ -199,6 +199,8 @@ int main(int argc, char **argv){
 
 	if( (var_f = (double*) malloc(sizeof(double) * numsteps)) == NULL)
 		error("vector var_f");
+	if( (var_f0 = (double*) malloc(sizeof(double) * numsteps)) == NULL)
+		error("vector var_f0");
 	if( (var_x = (double*) malloc(sizeof(double) * numsteps)) == NULL)
 		error("vector var_x");
 	if( (var_d1 = (double*) malloc(sizeof(double) * numsteps)) == NULL)
@@ -302,6 +304,12 @@ int main(int argc, char **argv){
 	  // remove zero mode only
 	  if(id==0){
 	    var_f[it] -= SQR(cabs(ukx[0]));
+	  }
+
+		// Sums of variances of Fourier modes
+		// Does not remove zero mode
+		for(i=0;i<alloc_local;i++){
+	    var_f0[it] += SQR(cabs(ukx[i]));
 	  }
 
 	  // variance of velocity gradient in x direction
@@ -443,6 +451,12 @@ int main(int argc, char **argv){
 	  write_real_1D_array(tmp,pid,N,numsteps,L,'f');
 	}
 
+	// sum all variances (v, Fourier space), including zero mode
+	MPI_Reduce(var_f0,tmp,numsteps,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	if(id==0){
+	  write_real_1D_array(tmp,pid,N,numsteps,L,'0');
+	}
+
 	// sum all variances (u, real space) into arrays on root process
 	MPI_Reduce(var_x,tmp,numsteps,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 	if(id==0){
@@ -502,6 +516,7 @@ int main(int argc, char **argv){
 	FREEP(rands);
 
 	FREEP(var_f);
+	FREEP(var_f0);
 	FREEP(var_x);
 	FREEP(var_d1);
 	FREEP(var_d2);
@@ -534,7 +549,7 @@ static inline void write_complex_3D_array(fftw_complex *y, LI pid, LI N,
 	if(id==0){
 
 		// open new file. if already existing, erase it
-		sprintf(name,"data/HeatF_%c_R_%04ld_N_%02d_IT_%06ld_L_%.3e_nu_%.3e_f0_%.3e_c2_%.3e.dat",axis,pid,BN,it,L,nu,f0,c2);
+		sprintf(name,"data/HeatF_%c_R_%04ld_N_%02d_IT_%06ld_L_%.3e_nu_%.3e_f0_%.3e.dat",axis,pid,BN,it,L,nu,f0);
 	  if( (fout = fopen(name,"w")) == NULL)
 	    errorwc(name);
 
@@ -544,7 +559,7 @@ static inline void write_complex_3D_array(fftw_complex *y, LI pid, LI N,
 		CLOSEFILE(fout);
 
 		// open file again, for appending
-		sprintf(name,"data/HeatF_%c_R_%04ld_N_%02d_IT_%06ld_L_%.3e_nu_%.3e_f0_%.3e_c2_%.3e.dat",axis,pid,BN,it,L,nu,f0,c2);
+		sprintf(name,"data/HeatF_%c_R_%04ld_N_%02d_IT_%06ld_L_%.3e_nu_%.3e_f0_%.3e.dat",axis,pid,BN,it,L,nu,f0);
 	  if( (fout = fopen(name,"a")) == NULL)
 	    errorwc(name);
 
@@ -575,9 +590,9 @@ static inline void write_real_1D_array(double *y, LI pid, LI N, LI numsteps,
   FILE *fout;
 	int BN = (int)log2(N);
 	int BNT = (int)log10(numsteps);
-	extern double nu,f0,c2;
+	extern double nu,f0;
 
-	sprintf(name,"data/HeatVar_%c_R_%04ld_N_%02d_NT_%02d_L_%.3e_nu_%.3e_f0_%.3e_c2_%.3e.dat",axis,pid,BN,BNT,L,nu,f0,c2);
+	sprintf(name,"data/HeatVar_%c_R_%04ld_N_%02d_NT_%02d_L_%.3e_nu_%.3e_f0_%.3e.dat",axis,pid,BN,BNT,L,nu,f0);
   if( (fout = fopen(name,"w")) == NULL)
     errorwc(name);
 

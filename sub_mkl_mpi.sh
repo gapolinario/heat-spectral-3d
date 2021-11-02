@@ -4,7 +4,7 @@
 ### shell du job
 #$ -S /bin/bash
 ### nom du job (a changer)
-#$ -N Cube
+#$ -N Heat3D
 ### file d'attente (a changer)
 #$ -q h6-E5-2667v4deb128
 ### parallel environment & nb cpu (NSLOTS)
@@ -16,8 +16,8 @@
 ### mails en debut et fin d'execution
 #$ -m be
 
-if [ "$#" -ne 6 ]; then
-    echo "Six parameters needed: ensemble id, BN, BNT, nu, f0, c2"
+if [ "$#" -ne 5 ]; then
+    echo "Five parameters needed: ensemble id, BN, BNT, nu, f0"
     exit 2
 fi
 
@@ -44,6 +44,6 @@ PREFIX="/applis/PSMN/debian9/software/Compiler/GCC/7.2.0/OpenMPI/3.0.0/"
 MPIRUN=${PREFIX}/bin/mpirun
 
 ### execution du programme
-${MPIRUN} -v -prefix ${PREFIX} -hostfile ${HOSTFILE} -np ${NSLOTS} ./heat.x $1 $2 $3 $4 $5 $6
+${MPIRUN} -v -prefix ${PREFIX} -hostfile ${HOSTFILE} -np ${NSLOTS} ./heat_mpi.x $1 $2 $3 $4 $5 $6
 
 # fin
