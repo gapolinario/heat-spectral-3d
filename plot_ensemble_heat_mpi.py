@@ -1,6 +1,6 @@
 # (local) $ make movecomp2
 # (psmn)  $ module load Python/3.6.1
-# (psmn)  $ python3 plot_heat_mpi.py
+# (psmn)  $ python3 plot_ensemble_heat_mpi.py
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,11 +8,12 @@ import matplotlib.pyplot as plt
 # external parameters
 
 R = 0
-BN = 5
+BN = 7
 BNT = 5
 Lcte = .1
 nu = .2
 f0 = 1.
+size=6
 
 N = 2**BN
 numsteps=10**BNT
@@ -133,8 +134,10 @@ var_theo += np.sum(np.fromiter((cuk_theo(i,0,0) for i in range(1,N) ), float))
 
 
 
-
-var = np.fromfile("data/HeatVar_f_R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}.dat".format(R,BN,BNT,L,nu,f0),dtype=np.double)
+var = np.zeros(numsteps)
+for i in range(size):
+    var += np.fromfile("data/HeatVar_f_R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}.dat".format(i,BN,BNT,L,nu,f0),dtype=np.double)
+var *= 1./size
 
 # check variance of all fourier modes (but for zero mode)
 plt.axhline(var_theo,color='k',linestyle='dashed')
@@ -191,9 +194,12 @@ plt.show()
 # theoretical value for variance in real space
 var_theo = .5*f0*L*L/nu
 
-var_time = np.fromfile("data/HeatVar_x_"+
-    "R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
-    +".dat",dtype=np.float64)
+var_time = np.zeros(numsteps)
+for i in range(size):
+    var_time += np.fromfile("data/HeatVar_x_"+
+    "R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(i,BN,BNT,L,nu,f0)
+    +".dat",dtype=np.double)
+var_time *= 1./size
 
 # plot full time evolution
 #"""
@@ -211,9 +217,12 @@ plt.show()
 # one direction, 1/6, sum of all 3 directions would give 1/2
 var_theo = f0/6./nu
 
-var_time = np.fromfile("data/HeatVar_1_"+
-    "R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
-    +".dat",dtype=np.float64)
+var_time = np.zeros(numsteps)
+for i in range(size):
+    var_time += np.fromfile("data/HeatVar_1_"+
+    "R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(i,BN,BNT,L,nu,f0)
+    +".dat",dtype=np.double)
+var_time *= 1./size
 
 # plot full time evolution
 #"""
@@ -232,9 +241,12 @@ plt.show()
 # one direction, 1/6, sum of all 3 directions would give 1/2
 var_theo = f0/6./nu
 
-var_time = np.fromfile("data/HeatVar_2_"+
-    "R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
-    +".dat",dtype=np.float64)
+var_time = np.zeros(numsteps)
+for i in range(size):
+    var_time += np.fromfile("data/HeatVar_2_"+
+    "R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(i,BN,BNT,L,nu,f0)
+    +".dat",dtype=np.double)
+var_time *= 1./size
 
 # plot full time evolution
 #"""
@@ -253,9 +265,12 @@ plt.show()
 # one direction, 1/6, sum of all 3 directions would give 1/2
 var_theo = f0/6./nu
 
-var_time = np.fromfile("data/HeatVar_3_"+
-    "R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
-    +".dat",dtype=np.float64)
+var_time = np.zeros(numsteps)
+for i in range(size):
+    var_time += np.fromfile("data/HeatVar_3_"+
+    "R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(i,BN,BNT,L,nu,f0)
+    +".dat",dtype=np.double)
+var_time *= 1./size
 
 # plot full time evolution
 #"""

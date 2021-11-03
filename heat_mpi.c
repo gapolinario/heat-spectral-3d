@@ -41,7 +41,7 @@ bash run_ccube_mpi.sh
 #define CRDR(i,j,k)   (N*DN*(i)+DN*(j)+k) // coordinates in 3D real array (DN due to MPI assignment)
 
 // MKL RNG
-#define BRNG    VSL_BRNG_MCG31
+#define BRNG    VSL_BRNG_MT19937
 #define METHOD  VSL_RNG_METHOD_GAUSSIAN_ICDF
 
 // k is the fastest axis, with size N3
@@ -55,8 +55,8 @@ typedef long int LI;
 typedef unsigned long int ULI;
 static const long double TWOPI =  6.2831853071795864769252867665590058L;
 static const long double PISQR =  9.8696044010893586188344909998761511L;
-fftw_plan plan_fx_f, plan_fx_b, plan_fy_f, plan_fy_b, plan_fz_f, plan_fz_b;
-fftw_plan plan_ux_f, plan_ux_b, plan_uy_f, plan_uy_b, plan_uz_f, plan_uz_b;
+fftw_plan plan_fx_f, plan_fx_b;
+fftw_plan plan_ux_f, plan_ux_b;
 // MPI variables
 ptrdiff_t alloc_local, local_n0, local_0_start;
 int id,np;
@@ -71,20 +71,15 @@ static inline void write_complex_3D_array(fftw_complex *y, LI pid, LI N,
 static inline void write_real_1D_array(double *y, LI pid, LI N, LI numsteps,
 	double L,	char axis);
 static inline void jentzen_kloeden_winkel_step(
-	fftw_complex *ukx,
-	fftw_complex *gx,
-	fftw_complex *tx,
+	fftw_complex *ukx, fftw_complex *gx, fftw_complex *tx,
 	double *K, double *K2, LI id, double dt, double sqdx, double visc);
-static inline void gen_force3D(double *fx, double *fy, double *fz,
-	fftw_complex *gx, fftw_complex *gy, fftw_complex *gz, double *ker,
-	LI N, LI HN, LI DN,
-	double TPI3, double PIL2, double sqdx,
-	VSLStreamStatePtr stream, double *rands);
+static inline void gen_force3D(double *fx,
+	fftw_complex *gx, double *ker, LI N, LI HN, LI DN, double TPI3, double PIL2,
+	double sqdx, VSLStreamStatePtr stream, double *rands);
 static inline void euler_maruyama_step(fftw_complex *ukx, fftw_complex *gx,
 	double *K2, LI N, LI HN, double dt, double sqdt, double visc);
 static inline void predictor_corrector_step(fftw_complex *ukx, fftw_complex *gx,
-	fftw_complex *tx,
-	double *K2, LI N, LI HN, double dt, double sqdt, double visc);
+	fftw_complex *tx, double *K2, LI N, LI HN, double dt, double sqdt, double visc);
 
 int main(int argc, char **argv){
 
@@ -99,7 +94,7 @@ int main(int argc, char **argv){
 	// t is a temp array, in Fourier space, used in predictor-corrector algorithm
 	double *K, *K2, *ker, *rands;
 	double *var_f, *var_x, *var_d1, *var_d2, *var_d3, *tmp; // observables
-	fftw_complex *gx, *gy, *gz, *ukx, *uky, *ukz, *tx, *ty, *tz; /* arrays */
+	fftw_complex *gx, *ukx, *tx; /* arrays */
 	//int dim;
 	double dx,sqdx,Ltot,L,dt,sqdt,visc,normN3,dtcte;
 	VSLStreamStatePtr stream; // MKL RNG
@@ -174,29 +169,13 @@ int main(int argc, char **argv){
 		error("vector ker");
 	if( (gx = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * alloc_local )) == NULL)
 		error("vector gx");
-	if( (gy = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * alloc_local )) == NULL)
-		error("vector gy");
-	if( (gz = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * alloc_local )) == NULL)
-		error("vector gz");
 	if( (ukx = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * alloc_local )) == NULL)
 		error("vector ukx");
-	if( (uky = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * alloc_local )) == NULL)
-		error("vector uky");
-	if( (ukz = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * alloc_local )) == NULL)
-		error("vector ukz");
 	if( (tx = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * alloc_local)) == NULL)
 		error("vector tx");
-	if( (ty = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * alloc_local)) == NULL)
-		error("vector ty");
-	if( (tz = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * alloc_local)) == NULL)
-		error("vector tz");
 
 	double *fx = (double *) gx;
-	double *fy = (double *) gy;
-	double *fz = (double *) gz;
 	double *uxx = (double *) ukx;
-	double *uxy = (double *) uky;
-	double *uxz = (double *) ukz;
 
 	if( (var_f = (double*) malloc(sizeof(double) * numsteps)) == NULL)
 		error("vector var_f");
@@ -217,17 +196,9 @@ int main(int argc, char **argv){
 	// Force vector transforms
 	plan_fx_f = fftw_mpi_plan_dft_r2c_3d(N, N, N, fx, gx, MPI_COMM_WORLD, FFTW_MEASURE);
 	plan_fx_b = fftw_mpi_plan_dft_c2r_3d(N, N, N, gx, fx, MPI_COMM_WORLD, FFTW_MEASURE);
-	plan_fy_f = fftw_mpi_plan_dft_r2c_3d(N, N, N, fy, gy, MPI_COMM_WORLD, FFTW_MEASURE);
-	plan_fy_b = fftw_mpi_plan_dft_c2r_3d(N, N, N, gy, fy, MPI_COMM_WORLD, FFTW_MEASURE);
-	plan_fz_f = fftw_mpi_plan_dft_r2c_3d(N, N, N, fz, gz, MPI_COMM_WORLD, FFTW_MEASURE);
-	plan_fz_b = fftw_mpi_plan_dft_c2r_3d(N, N, N, gz, fz, MPI_COMM_WORLD, FFTW_MEASURE);
 	// Velocity vector transforms
 	plan_ux_f = fftw_mpi_plan_dft_r2c_3d(N, N, N, uxx, ukx, MPI_COMM_WORLD, FFTW_MEASURE);
 	plan_ux_b = fftw_mpi_plan_dft_c2r_3d(N, N, N, ukx, uxx, MPI_COMM_WORLD, FFTW_MEASURE);
-	plan_uy_f = fftw_mpi_plan_dft_r2c_3d(N, N, N, uxy, uky, MPI_COMM_WORLD, FFTW_MEASURE);
-	plan_uy_b = fftw_mpi_plan_dft_c2r_3d(N, N, N, uky, uxy, MPI_COMM_WORLD, FFTW_MEASURE);
-	plan_uz_f = fftw_mpi_plan_dft_r2c_3d(N, N, N, uxz, ukz, MPI_COMM_WORLD, FFTW_MEASURE);
-	plan_uz_b = fftw_mpi_plan_dft_c2r_3d(N, N, N, ukz, uxz, MPI_COMM_WORLD, FFTW_MEASURE);
 
 	// Array of frequencies in Fourier space
   K[0]=0.0;
@@ -266,12 +237,6 @@ int main(int argc, char **argv){
 	for(i=0;i<alloc_local;i++){
 		ukx[i] = 0.;
 	}
-	for(i=0;i<alloc_local;i++){
-		uky[i] = 0.;
-	}
-	for(i=0;i<alloc_local;i++){
-		ukz[i] = 0.;
-	}
 
 	for(it=0;it<numsteps;it++){
 		var_f[it] = 0.;
@@ -291,11 +256,11 @@ int main(int argc, char **argv){
 
 	for(it=0;it<numsteps;it++){
 
-	  gen_force3D(fx,fy,fz,gx,gy,gz,ker,N,HN,DN,TPI3,PIL2,sqdx,stream,rands);
+	  gen_force3D(fx,gx,ker,N,HN,DN,TPI3,PIL2,sqdx,stream,rands);
 
 		//euler_maruyama_step(ukx,gx,K2,N,HN,dt,sqdt,visc);
-		predictor_corrector_step(ukx,gx,tx,K2,N,HN,dt,sqdt,visc);
-	  //jentzen_kloeden_winkel_step(ukx,gx,tx,K,K2,id,dt,sqdx,visc);
+		//predictor_corrector_step(ukx,gx,tx,K2,N,HN,dt,sqdt,visc);
+	  jentzen_kloeden_winkel_step(ukx,gx,tx,K,K2,id,dt,sqdx,visc);
 
 	  // Sums of variances of Fourier modes
 		for(i=0;i<alloc_local;i++){
@@ -386,18 +351,12 @@ int main(int argc, char **argv){
 	  // backup velocities in Fourier space
 	  for(i=0;i<alloc_local;i++)
 	    tx[i] = ukx[i];
-	  for(i=0;i<alloc_local;i++)
-	    ty[i] = uky[i];
-	  for(i=0;i<alloc_local;i++)
-	    tz[i] = ukz[i];
 
 	  // Wait for all processes to sync
 	  MPI_Barrier(MPI_COMM_WORLD);
 
 	  // velocities back to real space
 	  fftw_execute(plan_ux_b);
-	  fftw_execute(plan_uy_b);
-	  fftw_execute(plan_uz_b);
 
 	  for(i=0;i<local_n0;i++){
 	    for(j=0;j<N;j++){
@@ -410,10 +369,6 @@ int main(int argc, char **argv){
 	  // bring back velocities in Fourier space from backup
 	  for(i=0;i<alloc_local;i++)
 	    ukx[i] = tx[i];
-	  for(i=0;i<alloc_local;i++)
-	    uky[i] = ty[i];
-	  for(i=0;i<alloc_local;i++)
-	    ukz[i] = tz[i];
 
 	  /*// print velocity field at some of the steps
 	  write_complex_3D_array(uxx,pid,N,alloc_local,it,L,nu,f0,'x');
@@ -479,25 +434,11 @@ int main(int argc, char **argv){
 
   fftw_destroy_plan(plan_fx_f);
   fftw_destroy_plan(plan_fx_b);
-	fftw_destroy_plan(plan_fy_f);
-  fftw_destroy_plan(plan_fy_b);
-	fftw_destroy_plan(plan_fz_f);
-  fftw_destroy_plan(plan_fz_b);
 	fftw_destroy_plan(plan_ux_f);
   fftw_destroy_plan(plan_ux_b);
-	fftw_destroy_plan(plan_uy_f);
-  fftw_destroy_plan(plan_uy_b);
-	fftw_destroy_plan(plan_uz_f);
-  fftw_destroy_plan(plan_uz_b);
 	fftw_free(gx);
-	fftw_free(gy);
-	fftw_free(gz);
 	fftw_free(ukx);
-	fftw_free(uky);
-	fftw_free(ukz);
 	fftw_free(tx);
-	fftw_free(ty);
-	fftw_free(tz);
 	FREEP(ker);
 	FREEP(K);
 	FREEP(K2);
@@ -590,11 +531,9 @@ static inline void write_real_1D_array(double *y, LI pid, LI N, LI numsteps,
 
 }
 
-static inline void gen_force3D(double *fx, double *fy, double *fz,
-	fftw_complex *gx, fftw_complex *gy, fftw_complex *gz, double *ker,
-	LI N, LI HN, LI DN,
-	double TPI3, double PIL2, double sqdx,
-	VSLStreamStatePtr stream, double *rands){
+static inline void gen_force3D(double *fx, fftw_complex *gx, double *ker,
+	LI N, LI HN, LI DN,	double TPI3, double PIL2,
+	double sqdx, VSLStreamStatePtr stream, double *rands){
 
 	ptrdiff_t i,j,k;
 	double cte1,cte2,cte3,norm;
@@ -651,8 +590,7 @@ static inline void euler_maruyama_step(fftw_complex *ukx, fftw_complex *gx,
 }
 
 static inline void predictor_corrector_step(fftw_complex *ukx, fftw_complex *gx,
-	fftw_complex *tx,
-	double *K2, LI N, LI HN, double dt, double sqdt, double visc){
+	fftw_complex *tx, double *K2, LI N, LI HN, double dt, double sqdt, double visc){
 // order 1.0 predictor corrector algorithm
 // see Kloeden-Platen p. 502
 
@@ -701,9 +639,7 @@ static inline void predictor_corrector_step(fftw_complex *ukx, fftw_complex *gx,
 // Jentzen, Kloeden and Winkel, Annals of Applied Probability 21.3 (2011): 908-950
 // see eq. 21
 static inline void jentzen_kloeden_winkel_step(
-	fftw_complex *ukx,
-	fftw_complex *gx,
-	fftw_complex *tx,
+	fftw_complex *ukx, fftw_complex *gx, fftw_complex *tx,
 	double *K, double *K2, LI id, double dt, double sqdx, double visc){
 
 	LI i, i0;
