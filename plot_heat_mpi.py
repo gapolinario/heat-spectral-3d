@@ -138,14 +138,17 @@ var_theo += np.sum(np.fromiter((cuk_theo(i,0,0) for i in range(1,N) ), float))
 
 
 
-var = np.fromfile("data/"+str+
-        "_f_R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}.dat".format(R,BN,BNT,L,nu,f0),dtype=np.double)
+var_time = np.fromfile("data/"+str+
+            "_f_R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}.dat".format(R,BN,BNT,L,nu,f0),dtype=np.double)
+
+fig, axs = plt.subplots(4,2,figsize=(14,10))
 
 # check variance of all fourier modes (but for zero mode)
-plt.axhline(var_theo,color='k',linestyle='dashed')
-plt.axhline(np.mean(var[numsteps//2:]),color='red')
-plt.plot(var)
-plt.show()
+axs[0,0].axhline(var_theo,color='k',linestyle='dashed')
+axs[0,0].axhline(np.mean(var_time[numsteps//2:]),color='red')
+axs[0,0].plot(var_time)
+axs[0,0].set_xlabel(r'$t$')
+axs[0,0].set_ylabel(r'$\sum_k \mathbb{E}[|\widehat u_k|^2]$')
 
 """
 # check total variance (discrete sum)
@@ -197,17 +200,16 @@ plt.show()
 var_theo = .5*f0*L*L/nu
 
 var_time = np.fromfile("data/"+str+
-        "_x_"+"R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
-        +".dat",dtype=np.float64)
+            "_x_"+"R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
+            +".dat",dtype=np.double)
 
 # plot full time evolution
 #"""
-plt.plot(var_time,color='#7fc97f') # full time evolution
-#plt.ylim(0.,2.*np.amax(var_time[numsteps//2:]))
-plt.axhline(np.mean(var_time[numsteps//2:]),color='red') # numerical mean
-plt.axhline(y=var_theo,color='grey',linestyle='dashed')  # theoretical value
-#"""
-plt.show()
+axs[0,1].plot(var_time,color='#7fc97f') # full time evolution
+axs[0,1].axhline(np.mean(var_time[numsteps//2:]),color='red') # numerical mean
+axs[0,1].axhline(y=var_theo,color='grey',linestyle='dashed')  # theoretical value
+axs[0,1].set_xlabel(r'$t$')
+axs[0,1].set_ylabel(r'$\mathbb{E}[|u|^2]$')
 
 ##### GRADIENT VARIANCE d_x u_x
 
@@ -217,17 +219,14 @@ plt.show()
 var_theo = f0/6./nu
 
 var_time = np.fromfile("data/"+str+
-        "_1_"+"R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
-        +".dat",dtype=np.float64)
+            "_1_"+"R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
+            +".dat",dtype=np.double)
 
-# plot full time evolution
-#"""
-plt.plot(var_time,color='#7fc97f') # full time evolution
-#plt.ylim(0.,2.*np.amax(var_time[numsteps//2:]))
-plt.axhline(np.mean(var_time[numsteps//2:]),color='red') # numerical mean
-plt.axhline(y=var_theo,color='grey',linestyle='dashed')  # theoretical value
-#"""
-plt.show()
+axs[1,0].plot(var_time,color='#7fc97f') # full time evolution
+axs[1,0].axhline(np.mean(var_time[numsteps//2:]),color='red') # numerical mean
+axs[1,0].axhline(y=var_theo,color='grey',linestyle='dashed')  # theoretical value
+axs[1,0].set_xlabel(r'$t$')
+axs[1,0].set_ylabel(r'$\mathbb{E}[(\partial_x u)^2]$')
 
 
 ##### GRADIENT VARIANCE d_z u_y
@@ -238,17 +237,16 @@ plt.show()
 var_theo = f0/6./nu
 
 var_time = np.fromfile("data/"+str+
-        "_2_"+"R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
-        +".dat",dtype=np.float64)
+            "_2_"+"R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
+            +".dat",dtype=np.double)
 
 # plot full time evolution
 #"""
-plt.plot(var_time,color='#7fc97f') # full time evolution
-#plt.ylim(0.,2.*np.amax(var_time[numsteps//2:]))
-plt.axhline(np.mean(var_time[numsteps//2:]),color='red') # numerical mean
-plt.axhline(y=var_theo,color='grey',linestyle='dashed')  # theoretical value
-#"""
-plt.show()
+axs[1,1].plot(var_time,color='#7fc97f') # full time evolution
+axs[1,1].axhline(np.mean(var_time[numsteps//2:]),color='red') # numerical mean
+axs[1,1].axhline(y=var_theo,color='grey',linestyle='dashed')  # theoretical value
+axs[1,1].set_xlabel(r'$t$')
+axs[1,1].set_ylabel(r'$\mathbb{E}[(\partial_y u)^2]$')
 
 
 ##### GRADIENT VARIANCE d_z u_y
@@ -259,14 +257,51 @@ plt.show()
 var_theo = f0/6./nu
 
 var_time = np.fromfile("data/"+str+
-        "_3_"+"R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
-        +".dat",dtype=np.float64)
+            "_3_"+"R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
+            +".dat",dtype=np.double)
 
-# plot full time evolution
-#"""
-plt.plot(var_time,color='#7fc97f') # full time evolution
-#plt.ylim(0.,2.*np.amax(var_time[numsteps//2:]))
-plt.axhline(np.mean(var_time[numsteps//2:]),color='red') # numerical mean
-plt.axhline(y=var_theo,color='grey',linestyle='dashed')  # theoretical value
-#"""
+axs[2,0].plot(var_time,color='#7fc97f') # full time evolution
+axs[2,0].axhline(np.mean(var_time[numsteps//2:]),color='red') # numerical mean
+axs[2,0].axhline(y=var_theo,color='grey',linestyle='dashed')  # theoretical value
+axs[2,0].set_xlabel(r'$t$')
+axs[2,0].set_ylabel(r'$\mathbb{E}[(\partial_z u)^2]$')
+
+##### FORCE VARIANCE |f|^2
+
+
+# theoretical value for variance in real space
+# one direction, 1/6, sum of all 3 directions would give 1/2
+var_theo = 1.
+
+var_time = np.fromfile("data/"+str+
+            "_m_"+"R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
+            +".dat",dtype=np.double)
+
+axs[3,0].plot(var_time,color='#7fc97f') # full time evolution
+axs[3,0].axhline(np.mean(var_time[numsteps//2:]),color='red') # numerical mean
+axs[3,0].axhline(y=var_theo,color='grey',linestyle='dashed')  # theoretical value
+axs[3,0].set_xlabel(r'$t$')
+axs[3,0].set_ylabel(r'$\mathbb{E}[|f|^2]$')
+
+
+##### FORCE VARIANCE f*f
+
+
+# theoretical value for variance in real space
+# one direction, 1/6, sum of all 3 directions would give 1/2
+var_theo = 0.
+
+var_time = np.fromfile("data/"+str+
+            "_n_"+"R_{:04d}_N_{:02d}_NT_{:02d}_L_{:.3e}_nu_{:.3e}_f0_{:.3e}".format(R,BN,BNT,L,nu,f0)
+            +".dat",dtype=np.double)
+
+axs[3,1].plot(var_time,color='#7fc97f') # full time evolution
+axs[3,1].axhline(np.mean(var_time[numsteps//2:]),color='red') # numerical mean
+axs[3,1].axhline(y=var_theo,color='grey',linestyle='dashed')  # theoretical value
+axs[3,1].set_xlabel(r'$t$')
+axs[3,1].set_ylabel(r'$\mathcal{R}\mathbb{E}[f^2]$')
+
+##### END OF PLOTS
+
+plt.tight_layout()
 plt.show()

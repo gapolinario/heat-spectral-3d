@@ -94,6 +94,7 @@ int main(int argc, char **argv){
 	// t is a temp array, in Fourier space, used in predictor-corrector algorithm
 	double *K, *K2, *ker, *rands;
 	double *var_f, *var_x, *var_d1, *var_d2, *var_d3, *tmp; // observables
+	double *for_1, *for_2; // more observables
 	fftw_complex *gx, *ukx, *tx; /* arrays */
 	//int dim;
 	double dx,sqdx,Ltot,L,dt,sqdt,visc,normN3,dtcte;
@@ -181,6 +182,10 @@ int main(int argc, char **argv){
 		error("vector var_d2");
 	if( (var_d3 = (double*) malloc(sizeof(double) * numsteps)) == NULL)
 		error("vector var_d3");
+	if( (for_1 = (double*) malloc(sizeof(double) * numsteps)) == NULL)
+		error("vector for_1");
+	if( (for_2 = (double*) malloc(sizeof(double) * numsteps)) == NULL)
+		error("vector for_2");
 	if(id==0){
 		if( (tmp = (double*) malloc(sizeof(double) * numsteps)) == NULL)
 			error("vector tmp");
@@ -247,14 +252,55 @@ int main(int argc, char **argv){
 	for(it=0;it<numsteps;it++){
 		var_d3[it] = 0.;
 	}
+	for(it=0;it<numsteps;it++){
+		for_1[it] = 0.;
+	}
+	for(it=0;it<numsteps;it++){
+		for_2[it] = 0.;
+	}
 
 	for(it=0;it<numsteps;it++){
 
+		/***********
+
+		SIMULATION STAGE
+
+		***********/
+
 	  gen_force3D(gx,ker,N,TPI3,PIL2,sqdx,stream,rands);
 
-		euler_maruyama_step(ukx,gx,K2,N,dt,sqdt,visc);
-		//predictor_corrector_step(ukx,gx,tx,K2,N,dt,sqdt,visc);
+		//euler_maruyama_step(ukx,gx,K2,N,dt,sqdt,visc);
+		predictor_corrector_step(ukx,gx,tx,K2,N,dt,sqdt,visc);
 	  //jentzen_kloeden_winkel_step(ukx,gx,tx,K,K2,id,dt,sqdx,visc);
+
+		/***********
+
+		MEASURE FORCE STATISTICS
+
+		***********/
+
+		fftw_execute(plan_fx_b);
+
+		// |f|^2
+		for(i=0;i<alloc_local;i++){
+	    for_1[it] += SQR(cabs(gx[i]));
+	  }
+
+		// Re[f^2]
+		for(i=0;i<alloc_local;i++){
+	    for_2[it] += creal(gx[i]*gx[i]);
+	  }
+
+		fftw_execute(plan_fx_f);
+		for(i=0;i<alloc_local;i++){
+	    gx[i] *= normN3;
+	  }
+
+		/***********
+
+		MEASURE FIELD STATISTICS
+
+		***********/
 
 	  // Sums of variances of Fourier modes
 		for(i=0;i<alloc_local;i++){
@@ -286,7 +332,7 @@ int main(int argc, char **argv){
 	  for(i=0;i<local_n0;i++){
 	    for(j=0;j<N;j++){
 	      for(k=0;k<N;k++){
-	        var_d1[it] += SQR(gx[CRDR(i,j,k)]);
+	        var_d1[it] += SQR(cabs(gx[CRDR(i,j,k)]));
 	      }
 	    }
 	  }
@@ -311,7 +357,7 @@ int main(int argc, char **argv){
 	  for(i=0;i<local_n0;i++){
 	    for(j=0;j<N;j++){
 	      for(k=0;k<N;k++){
-	        var_d2[it] += SQR(gx[CRDR(i,j,k)]);
+	        var_d2[it] += SQR(cabs(gx[CRDR(i,j,k)]));
 	      }
 	    }
 	  }
@@ -336,7 +382,7 @@ int main(int argc, char **argv){
 	  for(i=0;i<local_n0;i++){
 	    for(j=0;j<N;j++){
 	      for(k=0;k<N;k++){
-	        var_d3[it] += SQR(gx[CRDR(i,j,k)]);
+	        var_d3[it] += SQR(cabs(gx[CRDR(i,j,k)]));
 	      }
 	    }
 	  }
@@ -355,7 +401,7 @@ int main(int argc, char **argv){
 	  for(i=0;i<local_n0;i++){
 	    for(j=0;j<N;j++){
 	      for(k=0;k<N;k++){
-	        var_x[it] += SQR(ukx[CRDR(i,j,k)]);
+	        var_x[it] += SQR(cabs(ukx[CRDR(i,j,k)]));
 	      }
 	    }
 	  }
@@ -368,6 +414,12 @@ int main(int argc, char **argv){
 	  write_complex_3D_array(uxx,pid,N,alloc_local,it,L,nu,f0,'x');*/
 
 	}
+
+	/***********
+
+	END OF MAIN LOOP
+
+	***********/
 
 	// spatial average variance velocity
 	for(it=0;it<numsteps;it++){
@@ -385,35 +437,51 @@ int main(int argc, char **argv){
 	for(it=0;it<numsteps;it++){
 	  var_d3[it] *= normN3;
 	}
+	for(it=0;it<numsteps;it++){
+	  for_1[it] *= normN3;
+	}
+	for(it=0;it<numsteps;it++){
+	  for_2[it] *= normN3;
+	}
+
+	/***********
+
+	WRITING STAGE
+
+	***********/
 
 	// sum all variances (v, Fourier space) into arrays on root process
 	MPI_Reduce(var_f,tmp,numsteps,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 	if(id==0){
 	  write_real_1D_array(tmp,pid,N,numsteps,L,'f');
 	}
-
 	// sum all variances (u, real space) into arrays on root process
 	MPI_Reduce(var_x,tmp,numsteps,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 	if(id==0){
 	  write_real_1D_array(tmp,pid,N,numsteps,L,'x');
 	}
-
 	// sum all variances (v, Fourier space) into arrays on root process
 	MPI_Reduce(var_d1,tmp,numsteps,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 	if(id==0){
 	  write_real_1D_array(tmp,pid,N,numsteps,L,'1');
 	}
-
 	// sum all variances (v, Fourier space) into arrays on root process
 	MPI_Reduce(var_d2,tmp,numsteps,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 	if(id==0){
 	  write_real_1D_array(tmp,pid,N,numsteps,L,'2');
 	}
-
 	// sum all variances (v, Fourier space) into arrays on root process
 	MPI_Reduce(var_d3,tmp,numsteps,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
 	if(id==0){
 	  write_real_1D_array(tmp,pid,N,numsteps,L,'3');
+	}
+	MPI_Reduce(for_1,tmp,numsteps,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	if(id==0){
+	  write_real_1D_array(tmp,pid,N,numsteps,L,'m');
+	}
+	MPI_Reduce(for_2,tmp,numsteps,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+	if(id==0){
+	  write_real_1D_array(tmp,pid,N,numsteps,L,'n');
 	}
 
 	/***********
@@ -441,6 +509,8 @@ int main(int argc, char **argv){
 	FREEP(var_d1);
 	FREEP(var_d2);
 	FREEP(var_d3);
+	FREEP(for_1);
+	FREEP(for_2);
 	if(id==0)
 		FREEP(tmp);
 
@@ -529,7 +599,7 @@ static inline void gen_force3D(fftw_complex *gx, double *ker,
 
 	ptrdiff_t i,j,k;
 	double cte1,cte2,cte3,norm;
-	double m1=0.,m2=1.;
+	double m1=0.,m2=1./sqrt(2.);
 
 	// call RNG
 	vdRngGaussian( METHOD, stream, 2*alloc_local, rands, m1, m2 );
