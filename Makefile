@@ -31,6 +31,10 @@ movecomp2:
 	scp *_mpi.sh comp2:/home/gbritoap/heat3d/
 	scp *_mpi.py comp2:/home/gbritoap/heat3d/
 
-## heat: complex heat equation
+## heat_mpi: r2c heat equation
 heat_mpi: heat_mpi.c
+	$(MPICC) $(CCFLAGS) $(MKLOPT) -o $@.x $^ $(FFTWLNK) $(MKLLNK)
+
+## heat_complex_mpi: complex heat equation
+heat_complex_mpi: heat_complex_mpi.c
 	$(MPICC) $(CCFLAGS) $(MKLOPT) -o $@.x $^ $(FFTWLNK) $(MKLLNK)

@@ -44,6 +44,6 @@ PREFIX="/applis/PSMN/debian9/software/Compiler/GCC/7.2.0/OpenMPI/3.0.0/"
 MPIRUN=${PREFIX}/bin/mpirun
 
 ### execution du programme
-${MPIRUN} -v -prefix ${PREFIX} -hostfile ${HOSTFILE} -np ${NSLOTS} ./heat_mpi.x $1 $2 $3 $4 $5 $6
+${MPIRUN} -v -prefix ${PREFIX} -hostfile ${HOSTFILE} -np ${NSLOTS} ./heat_complex_mpi.x $1 $2 $3 $4 $5 $6
 
 # fin
